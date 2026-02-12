@@ -19,42 +19,50 @@ from typing import Iterable, Dict, List
 
 def classify_barcodes(barcodes: Iterable[str]) -> Dict[str, List[str]]:
     """
-    Phân loại barcode theo prefix kèm dãy số.
-
-    Input:
-        barcodes: iterable các string barcode
-
-    Output:
-        {
-            "P": [list product numbers],
-            "Q": [list quantities],
-            "B": [list batches],
-            "UNKNOWN": [list barcode không hợp lệ]
-        }
+    Phân loại barcode, chỉ giữ lại P và Q lớn nhất, Batch giữ nguyên danh sách.
     """
-    result = {
-        "P": [],
-        "Q": [],
-        "B": [],
-        "UNKNOWN": []
-    }
+    # Khởi tạo giá trị mặc định là None cho P và Q để dễ so sánh
+    max_p = None
+    max_q = None
+    batches = []
+    unknowns = []
 
     for raw in barcodes:
         if not raw:
             continue
-
+        
         value = raw.strip()
+        prefix = value[0] if value else ""
+        content = value[1:]
 
-        if value.startswith("P") and value[1:].isdigit():
-            result["P"].append(value)
-        elif value.startswith("Q") and value[1:].isdigit():
-            result["Q"].append(value)
-        elif value.startswith("B") and value[1:].isdigit():
-            result["B"].append(value)
+        # Kiểm tra định dạng: Bắt đầu bằng P/Q/B và phần còn lại là số
+        if prefix in ("P", "Q", "B") and content.isdigit():
+            num_val = int(content) # Chuyển sang số để so sánh chính xác (ví dụ 1000 > 2)
+
+            if prefix == "P":
+                # Nếu chưa có P nào hoặc P hiện tại lớn hơn P cũ thì cập nhật
+                if max_p is None or num_val > int(max_p[1:]):
+                    max_p = value
+            
+            elif prefix == "Q":
+                # Tương tự cho Q
+                if max_q is None or num_val > int(max_q[1:]):
+                    max_q = value
+            
+            elif prefix == "B":
+                # Batch thì vẫn lấy tất cả theo yêu cầu cũ
+                batches.append(value)
         else:
-            result["UNKNOWN"].append(value)
+            # Không khớp định dạng thì cho vào UNKNOWN
+            unknowns.append(value)
 
-    return result
+    # Tổng hợp kết quả trả về (ép P và Q vào List để đúng format yêu cầu)
+    return {
+        "P": [max_p] if max_p else [],
+        "Q": [max_q] if max_q else [],
+        "B": batches,
+        "UNKNOWN": unknowns
+    }
 
 
 # -----------------------------

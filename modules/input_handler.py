@@ -12,6 +12,7 @@ Không phụ thuộc module khác
 
 CMD_SCAN = "SCAN"
 CMD_START = "START"
+CMD_HOME = "HOME"
 CMD_BOX_BIG = "BOX_BIG"
 CMD_BOX_SMALL = "BOX_SMALL"
 CMD_EXIT = "EXIT"
@@ -36,6 +37,8 @@ def get_command_from_keyboard() -> str:
         return CMD_BOX_BIG
     elif key == "2":
         return CMD_BOX_SMALL
+    elif key == "h":
+        return CMD_HOME
     elif key == "q":
         return CMD_EXIT
     else:

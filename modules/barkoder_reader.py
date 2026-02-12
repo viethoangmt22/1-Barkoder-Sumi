@@ -48,7 +48,7 @@ def collect_barcodes(
     return all_barcodes
 
 
-def restart_industrial_1d_scan(device=None):
+def back_home_from_industrial_1d_scan(device=None):
     """
     Khởi động lại phần đọc barcode 1D Industrial để reset dữ liệu.
     """
@@ -57,9 +57,6 @@ def restart_industrial_1d_scan(device=None):
     # Quay lại màn hình trước đó 2 lần.
     d.press("back")
     d.press("back")
-
-    # Mở lại chế độ quét barcode 1D Industrial.
-    d(resourceId="com.barkoder.demoscanner:id/cardBarcodesIndustrial1D").click()
 
 def back_to_main_screen(device=None):
     """
@@ -96,5 +93,3 @@ if __name__ == "__main__":
     print(f"Hoàn thành! Tổng số barcode: {len(barcodes)}")
     print(barcodes)
     print("Khởi động lại phần đọc barcode 1D Industrial...")
-    restart_industrial_1d_scan()
-    print("Hoàn tất.")
