@@ -27,11 +27,9 @@ def get_command_from_keyboard() -> str:
     """
     Đọc 1 phím từ bàn phím và trả về command chuẩn hoá
     """
-    key = input("Nhập lệnh [a=scan, s=bắt đầu, 1=thùng to, 2=thùng nhỏ, q=thoát]: ").strip()
+    key = input("Nhập lệnh [s=bắt đầu, 1=thùng to, 2=thùng nhỏ, q=thoát]: ").strip()
 
-    if key == "a":
-        return CMD_SCAN
-    elif key == "s":
+    if key == "s":
         return CMD_START
     elif key == "1":
         return CMD_BOX_BIG
