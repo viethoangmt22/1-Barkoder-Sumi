@@ -5,25 +5,24 @@ main.py
 1. Khởi động app Barkoder trên điện thoại
 2. Hiện menu → user chọn loại thùng (to / nhỏ)
 3. User nhấn 's' → khởi động camera scan
-4. User nhấn 'a' → chụp & thu thập barcode
+4. Tự động thu thập barcode liên tục
 5. Phân loại → xử lý session → gửi kết quả
 6. Lặp lại cho đến khi xong
 
 Luồng phím:
     1/2  = chọn thùng to / nhỏ
     s    = bắt đầu scan (khởi động camera)
-    a    = chụp barcode
     h    = quay lại menu chọn thùng
     q    = thoát chương trình
 """
 
 import sys
+import time
 import uiautomator2 as u2
 
 # Import các module trong project
 from modules.input_handler import (
     get_command_from_keyboard,
-    CMD_SCAN,       # a = chụp
     CMD_START,      # s = bắt đầu
     CMD_HOME,       # h = quay lại
     CMD_BOX_BIG,    # 1 = thùng to
@@ -157,57 +156,52 @@ def run_scan_session(device, steps):
         print(f"\n{'=' * 40}")
         print(f"  {description}")
         print(f"{'=' * 40}")
-        print("  Đặt thùng trước camera, nhấn 'a' để chụp")
-        print("  Nhấn 'h' để quay lại chọn thùng")
+        print("  Đặt thùng trước camera, chương trình sẽ tự quét")
+        print("  Nhấn Ctrl+C để dừng khẩn cấp")
 
-        # Vòng lặp cho phép thử lại nếu scan thất bại
+        # Vòng lặp tự động quét cho phép thử lại nếu scan thất bại
         step_done = False
+        step_start = time.time()
+        timeout_seconds = 120
+        poll_interval = 0.5
+
         while not step_done:
-            cmd = get_command_from_keyboard()
-
-            # --- User nhấn 'a' → chụp barcode ---
-            if cmd == CMD_SCAN:
-                print("\n[SCAN] Đang thu thập barcode...")
-                barcodes = collect_barcodes(device)
-                print(f"[SCAN] Tìm thấy {len(barcodes)} barcode: {barcodes}")
-
-                # Phân loại barcode (P, Q, B, UNKNOWN)
-                classified = classify_barcodes(barcodes)
-                pretty_print(classified)
-
-                # Gọi handler của session để xử lý bước này
-                ok, msg = handler(classified)
-                print(f"\n[SESSION] {msg}")
-
-                # Quay lại màn hình chính của scan (reset dữ liệu trên app)
-                back_home_from_industrial_1d_scan(device)
-
-                if ok:
-                    # Bước này thành công!
-                    # Nếu còn bước tiếp → khởi động lại camera
-                    if i < len(steps) - 1:
-                        print("[SCAN] Chuẩn bị bước tiếp...")
-                        start_industrial_1d_scan(device)
-                    step_done = True
-                else:
-                    # Scan thất bại → cho phép thử lại
-                    print("\n  !!! Scan thất bại, vui lòng thử lại !!!")
-                    back_home_from_industrial_1d_scan(device)
-                    start_industrial_1d_scan(device)
-                    print("  Nhấn 'a' để chụp lại")
-
-            # --- User nhấn 'h' → quay lại home ---
-            elif cmd == CMD_HOME:
+            if time.time() - step_start > timeout_seconds:
+                print("\n[TIMEOUT] Quá thời gian chờ scan, quay lại menu")
                 back_home_from_industrial_1d_scan(device)
                 return False
 
-            # --- User nhấn 'q' → thoát ---
-            elif cmd == CMD_EXIT:
-                print("\n[EXIT] Thoát chương trình. Tạm biệt!")
-                sys.exit(0)
+            print("\n[SCAN] Đang thu thập barcode...")
+            barcodes = collect_barcodes(device)
 
+            if not barcodes:
+                time.sleep(poll_interval)
+                continue
+
+            print(f"[SCAN] Tìm thấy {len(barcodes)} barcode: {barcodes}")
+
+            # Phân loại barcode (P, Q, B, UNKNOWN)
+            classified = classify_barcodes(barcodes)
+            pretty_print(classified)
+
+            # Gọi handler của session để xử lý bước này
+            ok, msg = handler(classified)
+            print(f"\n[SESSION] {msg}")
+
+            if ok:
+                # Quay lại màn hình chính của scan (reset dữ liệu trên app)
+                back_home_from_industrial_1d_scan(device)
+                # Bước này thành công!
+                # Nếu còn bước tiếp → khởi động lại camera
+                if i < len(steps) - 1:
+                    print("[SCAN] Chuẩn bị bước tiếp...")
+                    start_industrial_1d_scan(device)
+                step_done = True
             else:
-                print("  Nhấn 'a' để chụp, 'h' để quay lại")
+                # Scan thất bại → cho phép thử lại
+                print("\n  !!! Scan thất bại, vui lòng đặt lại thùng !!!")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
 
     # Tất cả bước đã hoàn thành
     return True
@@ -280,7 +274,7 @@ def main():
     │            ↓                        │
     │  Nhấn 's' → khởi động camera       │
     │            ↓                        │
-    │  Nhấn 'a' → chụp → xử lý          │  ← lặp từng bước
+    │  Tự quét → xử lý                 │  ← lặp từng bước
     │            ↓                        │
     │  Gửi kết quả (sender)              │
     │            ↓                        │
