@@ -50,13 +50,16 @@ def collect_barcodes(
 
 def back_home_from_industrial_1d_scan(device=None):
     """
-    Khởi động lại phần đọc barcode 1D Industrial để reset dữ liệu.
+    Quay về màn hình chính của app Barkoder để reset dữ liệu.
+    Dùng cách đóng/mở app thay vì nhấn back để đảm bảo luôn về đúng home screen.
     """
     d = device or u2.connect()
 
-    # Quay lại màn hình trước đó 2 lần.
-    d.press("back")
-    d.press("back")
+    # Đóng và mở lại app để đảm bảo về đúng trang chủ
+    d.app_stop("com.barkoder.demoscanner")
+    time.sleep(0.3)  # Chờ app đóng hoàn toàn
+    d.app_start("com.barkoder.demoscanner")
+    time.sleep(0.5)  # Chờ app khởi động xong
 
 def back_to_main_screen(device=None):
     """
@@ -69,6 +72,10 @@ def back_to_main_screen(device=None):
     d.app_stop("com.barkoder.demoscanner")
     d.app_start("com.barkoder.demoscanner")
 
+def close_app(device=None):
+    d = device or u2.connect()
+    # Đảm bảo về đúng trang chủ bằng cách khởi động lại app.
+    d.app_stop("com.barkoder.demoscanner")
 
 def start_industrial_1d_scan(device=None):
     """
