@@ -200,8 +200,7 @@ def run_scan_session(device, steps):
             else:
                 # Scan thất bại → cho phép thử lại
                 print("\n  !!! Scan thất bại, vui lòng đặt lại thùng !!!")
-                back_home_from_industrial_1d_scan(device)
-                start_industrial_1d_scan(device)
+                
 
     # Tất cả bước đã hoàn thành
     return True
