@@ -10,7 +10,6 @@ Tín hiệu mong đợi:
 """
 
 import serial
-import serial.tools.list_ports
 import time
 from enum import Enum
 
@@ -27,7 +26,7 @@ class COMReader:
         Khởi tạo COM reader
         
         Args:
-            port: Tên cổng COM (vd: 'COM3'). Nếu None, sẽ tự detect
+            port: Tên cổng COM (vd: 'COM3'). Bắt buộc phải truyền
             baudrate: Tốc độ truyền (mặc định 9600)
             timeout: Thời gian chờ đọc (giây)
         """
@@ -36,27 +35,6 @@ class COMReader:
         self.timeout = timeout
         self.serial = None
         self.last_state = SwitchState.OFF
-        
-    def auto_detect_port(self):
-        """
-        Tự động tìm cổng COM khả dụng
-        
-        Returns:
-            str: Tên cổng COM hoặc None nếu không tìm thấy
-        """
-        ports = serial.tools.list_ports.comports()
-        
-        if not ports:
-            return None
-            
-        # Ưu tiên cổng có mô tả Arduino/USB Serial
-        for port in ports:
-            desc = port.description.lower()
-            if 'arduino' in desc or 'ch340' in desc or 'usb serial' in desc:
-                return port.device
-        
-        # Nếu không tìm thấy, trả về cổng đầu tiên
-        return ports[0].device
     
     def connect(self):
         """
@@ -66,12 +44,8 @@ class COMReader:
             bool: True nếu kết nối thành công
         """
         try:
-            # Auto detect nếu chưa có port
             if not self.port:
-                self.port = self.auto_detect_port()
-                
-            if not self.port:
-                print("[COM] Không tìm thấy cổng COM nào")
+                print("[COM] Thiếu cổng COM. Vui lòng cấu hình com_port trong config.json")
                 return False
             
             # Mở kết nối serial
@@ -196,8 +170,8 @@ def main():
     - Arduino gửi "1" hoặc "0" qua Serial
     """
     
-    # Tự động tìm cổng COM
-    reader = COMReader()
+    # Test nhanh bằng cổng COM cấu hình sẵn
+    reader = COMReader(port="COM3")
     
     if not reader.connect():
         print("Không thể kết nối. Kiểm tra:")
