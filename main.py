@@ -39,6 +39,14 @@ from modules.barkoder_reader import (
 from modules.classifier import classify_barcodes, pretty_print
 from modules.session_manager import SessionManager
 from modules.sender import send_barcodes
+from modules.com_reader import COMReader
+
+
+# ============================================================
+# CONFIGURATION
+# ============================================================
+
+AUTO_MODE_ENABLED = True  # True = Auto mode (COM sensor), False = Manual mode (keyboard)
 
 
 # ============================================================
@@ -262,16 +270,15 @@ def run_small_box_flow(device, session):
 
 
 # ============================================================
-# HÀM CHÍNH
+# MANUAL MODE (chọn loại thùng bằng phím)
 # ============================================================
 
-def main():
+def run_manual_mode(device, session):
     """
-    Luồng chính của chương trình:
-
+    MANUAL MODE: User nhấn phím để chọn loại thùng
+    
+    Luồng:
     ┌─────────────────────────────────────┐
-    │  Khởi động app Barkoder             │
-    │            ↓                        │
     │  Chọn loại thùng (1 hoặc 2)        │  ← vòng lặp chính
     │            ↓                        │
     │  Nhấn 's' → khởi động camera       │
@@ -283,32 +290,7 @@ def main():
     │  Quay lại chọn thùng               │
     └─────────────────────────────────────┘
     """
-
-    print_header()
-
-    # --------------------------------------------------
-    # Bước 0: Kết nối điện thoại & khởi động app
-    # --------------------------------------------------
-    print("\n[INIT] Đang kết nối thiết bị Android...")
-
-    try:
-        device = u2.connect()
-        print("[INIT] Kết nối thành công!")
-    except Exception as e:
-        print(f"[ERROR] Không thể kết nối thiết bị: {e}")
-        print("  → Kiểm tra USB / ADB đã bật chưa")
-        return
-
-    print("[INIT] Đang khởi động app Barkoder...")
-    start_barkoder_app(device)
-    print("[INIT] App sẵn sàng!\n")
-
-    # Tạo session manager để quản lý state
-    session = SessionManager()
-
-    # --------------------------------------------------
-    # Vòng lặp chính: chọn thùng → scan → gửi → lặp lại
-    # --------------------------------------------------
+    
     while True:
         # Reset session về trạng thái ban đầu
         session.reset()
@@ -338,8 +320,252 @@ def main():
 
             print("\n>>> Quay lại menu chọn thùng...")
         else:
-            # User nhấn 'h' → quay lại chọn thùng (không cần thông báo thêm)
+            # User nhấn 'h' → quay lại chọn thùng
             print("\n>>> Quay lại menu chọn thùng...")
+
+
+# ============================================================
+# AUTO MODE (tự động phân loại bằng cảm biến COM)
+# ============================================================
+
+def run_auto_mode(device, session):
+    """
+    AUTO MODE: Tự động phát hiện loại thùng bằng cảm biến switch
+    
+    Luồng:
+    ┌─────────────────────────────────────┐
+    │  Switch ON (lần 1)                  │
+    │    → Scan P + Q → Lưu Step 1       │
+    │  Switch OFF → Nhấc thùng ra        │
+    │                                     │
+    │  Switch ON (lần 2)                  │
+    │    → Phân nhánh:                   │
+    │       • Có Batch → THÙNG TO        │
+    │       • Có P+Q → THÙNG NHỎ #2      │
+    │                                     │
+    │  (Nếu thùng nhỏ) Switch ON (lần 3) │
+    │    → Scan Batch chung              │
+    │                                     │
+    │  Gửi dữ liệu → Reset → Lặp lại    │
+    └─────────────────────────────────────┘
+    """
+    
+    # Kết nối COM reader
+    print("\n[AUTO] Đang kết nối cảm biến COM...")
+    com = COMReader()
+    
+    if not com.connect():
+        print("[AUTO] Không thể kết nối COM. Thoát chế độ auto.")
+        return
+    
+    print("[AUTO] Chế độ AUTO đã sẵn sàng!")
+    print("[AUTO] Đặt thùng lên băng chuyền để bắt đầu...\n")
+    
+    # Khởi động camera sẵn
+    start_industrial_1d_scan(device)
+    
+    try:
+        while True:
+            # Reset session
+            session.reset()
+            
+            # ===== STEP 1: Chờ switch ON → Scan P + Q =====
+            print("\n" + "="*50)
+            print("  STEP 1: Chờ thùng đầu tiên...")
+            print("="*50)
+            
+            com.wait_for_on()
+            
+            print("[AUTO] Đang thu thập barcode (P + Q)...")
+            time.sleep(0.5)  # Chờ camera focus
+            
+            barcodes = collect_barcodes(device)
+            if not barcodes:
+                print("[AUTO] ⚠ Không tìm thấy barcode. Bỏ qua thùng này.")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
+                com.wait_for_off()  # Đợi thùng được nhấc ra
+                continue
+            
+            print(f"[AUTO] Tìm thấy {len(barcodes)} barcode: {barcodes}")
+            
+            classified = classify_barcodes(barcodes)
+            pretty_print(classified)
+            
+            # Xử lý step 1 (có thể dùng handle_small_box_1 hoặc handle_big_box_face_a)
+            ok, msg = session.handle_small_box_1(classified)
+            print(f"[AUTO] {msg}")
+            
+            if not ok:
+                print("[AUTO] ✗ Step 1 thất bại. Bỏ qua thùng này.")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
+                com.wait_for_off()
+                continue
+            
+            print("[AUTO] ✓ Step 1 hoàn thành")
+            back_home_from_industrial_1d_scan(device)
+            start_industrial_1d_scan(device)
+            
+            # Chờ thùng được nhấc ra
+            com.wait_for_off()
+            
+            # ===== STEP 2: Chờ switch ON → Phân nhánh =====
+            print("\n" + "="*50)
+            print("  STEP 2: Chờ thùng tiếp theo (Batch hoặc Thùng #2)...")
+            print("="*50)
+            
+            com.wait_for_on()
+            
+            print("[AUTO] Đang thu thập barcode...")
+            time.sleep(0.5)
+            
+            barcodes = collect_barcodes(device)
+            if not barcodes:
+                print("[AUTO] ⚠ Không tìm thấy barcode. Bỏ qua.")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
+                com.wait_for_off()
+                continue
+            
+            print(f"[AUTO] Tìm thấy {len(barcodes)} barcode: {barcodes}")
+            
+            classified = classify_barcodes(barcodes)
+            pretty_print(classified)
+            
+            # Phân nhánh thông minh
+            ok, msg, next_step = session.handle_auto_step_2_smart(classified)
+            print(f"[AUTO] {msg}")
+            
+            if not ok:
+                print("[AUTO] ✗ Step 2 thất bại. Reset session.")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
+                com.wait_for_off()
+                continue
+            
+            back_home_from_industrial_1d_scan(device)
+            start_industrial_1d_scan(device)
+            
+            # Nếu đã xong (THÙNG TO) → gửi data
+            if next_step == "DONE":
+                print("\n[AUTO] ✓ Phát hiện THÙNG TO - Hoàn thành!")
+                com.wait_for_off()
+                
+                # Gửi dữ liệu
+                result = session.get_result()
+                if result:
+                    barcodes_to_send = [code for code in result if code is not None]
+                    print(f"\n[SEND] Đang gửi {len(barcodes_to_send)} barcode...")
+                    send_barcodes(barcodes_to_send)
+                    print("[SEND] Hoàn thành!")
+                
+                print("\n>>> Chờ thùng tiếp theo...\n")
+                continue
+            
+            # Nếu chưa xong (THÙNG NHỎ) → chờ step 3
+            com.wait_for_off()
+            
+            # ===== STEP 3: Chờ Batch chung =====
+            print("\n" + "="*50)
+            print("  STEP 3: Chờ Batch chung...")
+            print("="*50)
+            
+            com.wait_for_on()
+            
+            print("[AUTO] Đang thu thập Batch...")
+            time.sleep(0.5)
+            
+            barcodes = collect_barcodes(device)
+            if not barcodes:
+                print("[AUTO] ⚠ Không tìm thấy Batch. Bỏ qua.")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
+                com.wait_for_off()
+                continue
+            
+            print(f"[AUTO] Tìm thấy {len(barcodes)} barcode: {barcodes}")
+            
+            classified = classify_barcodes(barcodes)
+            pretty_print(classified)
+            
+            ok, msg = session.handle_big_box_batch(classified)
+            print(f"[AUTO] {msg}")
+            
+            if not ok:
+                print("[AUTO] ✗ Step 3 thất bại. Reset session.")
+                back_home_from_industrial_1d_scan(device)
+                start_industrial_1d_scan(device)
+                com.wait_for_off()
+                continue
+            
+            print("\n[AUTO] ✓ THÙNG NHỎ hoàn thành!")
+            back_home_from_industrial_1d_scan(device)
+            start_industrial_1d_scan(device)
+            com.wait_for_off()
+            
+            # Gửi dữ liệu
+            result = session.get_result()
+            if result:
+                barcodes_to_send = [code for code in result if code is not None]
+                print(f"\n[SEND] Đang gửi {len(barcodes_to_send)} barcode...")
+                send_barcodes(barcodes_to_send)
+                print("[SEND] Hoàn thành!")
+            
+            print("\n>>> Chờ thùng tiếp theo...\n")
+    
+    except KeyboardInterrupt:
+        print("\n[AUTO] Dừng chế độ auto")
+    
+    finally:
+        com.disconnect()
+        back_home_from_industrial_1d_scan(device)
+
+
+# ============================================================
+# HÀM CHÍNH
+# ============================================================
+
+def main():
+    """
+    Entry point chính - Chọn mode và khởi động
+    """
+
+    print_header()
+
+    # --------------------------------------------------
+    # Bước 0: Kết nối điện thoại & khởi động app
+    # --------------------------------------------------
+    print("\n[INIT] Đang kết nối thiết bị Android...")
+
+    try:
+        device = u2.connect()
+        print("[INIT] Kết nối thành công!")
+    except Exception as e:
+        print(f"[ERROR] Không thể kết nối thiết bị: {e}")
+        print("  → Kiểm tra USB / ADB đã bật chưa")
+        return
+
+    print("[INIT] Đang khởi động app Barkoder...")
+    start_barkoder_app(device)
+    print("[INIT] App sẵn sàng!\n")
+
+    # Tạo session manager
+    session = SessionManager()
+
+    # --------------------------------------------------
+    # Chọn mode và chạy
+    # --------------------------------------------------
+    if AUTO_MODE_ENABLED:
+        print("\n" + "="*50)
+        print("  CHẾ ĐỘ: AUTO (Cảm biến COM)")
+        print("="*50)
+        run_auto_mode(device, session)
+    else:
+        print("\n" + "="*50)
+        print("  CHẾ ĐỘ: MANUAL (Nhấn phím)")
+        print("="*50)
+        run_manual_mode(device, session)
 
 
 # ============================================================

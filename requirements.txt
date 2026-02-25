@@ -1,0 +1,10 @@
+# Dependencies cho project Barkoder Scanner
+# Cài đặt: pip install -r requirements.txt
+
+# UI Automation cho Android
+uiautomator2>=2.16.0
+
+# Serial port communication (cho cảm biến COM)
+pyserial>=3.5
+
+# Các dependencies khác (nếu có)
