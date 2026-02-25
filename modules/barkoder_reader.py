@@ -86,10 +86,4 @@ def start_barkoder_app(device=None):
     d.app_start("com.barkoder.demoscanner")
 
 if __name__ == "__main__":
-    print("Khởi động app Barkoder Demo Scanner...")
-    start_industrial_1d_scan()
-    print("Đang bắt đầu thu thập dữ liệu...")
-    barcodes = collect_barcodes()
-    print(f"Hoàn thành! Tổng số barcode: {len(barcodes)}")
-    print(barcodes)
-    print("Khởi động lại phần đọc barcode 1D Industrial...")
+    back_home_from_industrial_1d_scan()
