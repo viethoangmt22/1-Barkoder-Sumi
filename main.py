@@ -30,6 +30,7 @@ from modules.input_handler import (
     CMD_EXIT,       # q = thoát
 )
 from modules.barkoder_reader import (
+    close_app,
     start_barkoder_app,
     start_industrial_1d_scan,
     collect_barcodes,
@@ -90,6 +91,7 @@ def choose_box_type():
             return "SMALL"
 
         elif cmd == CMD_EXIT:
+            close_app()
             print("\n[EXIT] Thoát chương trình. Tạm biệt!")
             sys.exit(0)
 
@@ -143,6 +145,7 @@ def run_scan_session(device, steps):
             return False
 
         elif cmd == CMD_EXIT:
+            close_app(device)
             print("\n[EXIT] Thoát chương trình. Tạm biệt!")
             sys.exit(0)
 
