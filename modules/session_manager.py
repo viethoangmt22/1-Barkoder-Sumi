@@ -152,6 +152,63 @@ class SessionManager:
         return True, "Thùng TO sẵn sàng gửi"
 
     # -------------------------
+    # AUTO MODE (phân nhánh thông minh)
+    # -------------------------
+
+    def handle_auto_step_2_smart(self, classified):
+        """
+        AUTO MODE - Bước 2 (phân nhánh thông minh)
+        
+        Sau khi có P + Q từ step 1, step 2 có thể là:
+          Case A: Scan được BATCH → Kết luận THÙNG TO → Chốt ngay
+          Case B: Scan được P + Q  → Kết luận THÙNG NHỎ #2 → Đợi step 3
+        
+        Returns:
+            (ok, msg, next_step)
+            - ok: True/False
+            - msg: Thông báo
+            - next_step: "DONE" (chốt luôn) hoặc "WAIT_STEP_3" (cần step 3)
+        """
+        # Kiểm tra state hợp lệ (phải đã có dữ liệu từ step 1)
+        if self.state not in ("SMALL_BOX_1_DONE", "BIG_BOX_PQ_DONE"):
+            return False, "Chưa có dữ liệu step 1", None
+
+        P = classified.get("P", [])
+        Q = classified.get("Q", [])
+        B = classified.get("B", [])
+
+        # ===== CASE A: Có BATCH → THÙNG TO =====
+        if B and len(B) == 1:
+            # Không được có P hoặc Q kèm theo
+            if P or Q:
+                return False, "BATCH không được đi kèm P hoặc Q", None
+            
+            # Lưu Batch và chốt
+            self.B = B[0]
+            self.state = "READY_TO_SEND"
+            
+            return True, "✓ Phát hiện THÙNG TO → Đã lưu Batch → Sẵn sàng gửi", "DONE"
+
+        # ===== CASE B: Có P + Q → THÙNG NHỎ #2 =====
+        elif P and Q:
+            if len(P) != 1 or len(Q) != 1:
+                return False, "Thùng nhỏ #2 cần đúng 1 P và 1 Q", None
+            
+            # Kiểm tra P phải trùng với step 1
+            if P[0] != self.P:
+                return False, f"Product Number không khớp (step 1: {self.P}, step 2: {P[0]})", None
+            
+            # Lưu Q2
+            self.Q2 = Q[0]
+            self.state = "SMALL_BOX_2_DONE"
+            
+            return True, "✓ Phát hiện THÙNG NHỎ #2 → Đã lưu Q2 → Chờ Batch", "WAIT_STEP_3"
+
+        # ===== Không khớp case nào =====
+        else:
+            return False, "Không phát hiện Batch hoặc P+Q hợp lệ", None
+
+    # -------------------------
     # Output
     # -------------------------
 
