@@ -111,23 +111,15 @@ class COMReader:
         Returns:
             bool: True nếu switch đã ON, False nếu timeout
         """
-        start_time = time.time()
-        
-        print("[COM] Đang chờ switch ON...")
-        
-        while True:
-            state = self.read_state()
-            
-            if state == SwitchState.ON:
-                print("[COM] ✓ Switch ON")
-                return True
-            
-            # Check timeout
-            if timeout and (time.time() - start_time) > timeout:
-                print("[COM] ✗ Timeout chờ switch ON")
-                return False
-            
-            time.sleep(0.1)  # Polling interval
+        return self._wait_for_state_stable(
+            target_state=SwitchState.ON,
+            timeout=timeout,
+            stable_seconds=0.3,
+            poll_interval=0.05,
+            waiting_message="[COM] Đang chờ switch ON...",
+            success_message="[COM] ✓ Switch ON (ổn định)",
+            timeout_message="[COM] ✗ Timeout chờ switch ON",
+        )
     
     def wait_for_off(self, timeout=None):
         """
@@ -139,23 +131,53 @@ class COMReader:
         Returns:
             bool: True nếu switch đã OFF, False nếu timeout
         """
+        return self._wait_for_state_stable(
+            target_state=SwitchState.OFF,
+            timeout=timeout,
+            stable_seconds=0.3,
+            poll_interval=0.05,
+            waiting_message="[COM] Đang chờ switch OFF...",
+            success_message="[COM] ✓ Switch OFF (ổn định)",
+            timeout_message="[COM] ✗ Timeout chờ switch OFF",
+        )
+
+    def _wait_for_state_stable(
+        self,
+        target_state,
+        timeout,
+        stable_seconds,
+        poll_interval,
+        waiting_message,
+        success_message,
+        timeout_message,
+    ):
+        """
+        Chờ đến khi target_state giữ ổn định liên tục trong stable_seconds.
+        Đây là debounce phần mềm để lọc nhiễu bấm/nhả nhanh.
+        """
         start_time = time.time()
-        
-        print("[COM] Đang chờ switch OFF...")
-        
+        stable_start = None
+
+        print(waiting_message)
+
         while True:
             state = self.read_state()
-            
-            if state == SwitchState.OFF:
-                print("[COM] ✓ Switch OFF")
-                return True
-            
-            # Check timeout
+
+            if state == target_state:
+                if stable_start is None:
+                    stable_start = time.time()
+
+                if (time.time() - stable_start) >= stable_seconds:
+                    print(success_message)
+                    return True
+            else:
+                stable_start = None
+
             if timeout and (time.time() - start_time) > timeout:
-                print("[COM] ✗ Timeout chờ switch OFF")
+                print(timeout_message)
                 return False
-            
-            time.sleep(0.1)
+
+            time.sleep(poll_interval)
 
 
 # ============================================================
