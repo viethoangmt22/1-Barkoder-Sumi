@@ -12,6 +12,9 @@ main.py
 import sys
 import time
 import json
+import atexit
+import signal
+import ctypes
 import uiautomator2 as u2
 
 # Import các module trong project
@@ -33,6 +36,79 @@ from modules.com_reader import COMReader, SwitchState
 # ============================================================
 
 CONFIG_FILE = "config.json"
+
+# ============================================================
+# CLEANUP/EXIT HANDLER
+# ============================================================
+
+_cleanup_callbacks = []
+_cleanup_done = False
+_win_console_handler_ref = None
+
+
+def register_cleanup(callback):
+    """Đăng ký callback cleanup, sẽ chạy khi thoát app."""
+    _cleanup_callbacks.append(callback)
+
+
+def run_cleanup():
+    """
+    Chạy cleanup 1 lần duy nhất.
+    Dùng cho cả Ctrl+C, lỗi runtime, và nhấn nút X trên cửa sổ console.
+    """
+    global _cleanup_done
+
+    if _cleanup_done:
+        return
+
+    _cleanup_done = True
+
+    # Chạy ngược thứ tự đăng ký: tài nguyên tạo sau sẽ đóng trước
+    for callback in reversed(_cleanup_callbacks):
+        try:
+            callback()
+        except Exception:
+            pass
+
+
+def _signal_handler(signum, frame):
+    """Handle SIGINT/SIGTERM."""
+    run_cleanup()
+
+    # Tránh raise trong handler, thoát nhanh gọn
+    raise SystemExit(0)
+
+
+def install_exit_handlers():
+    """
+    Đăng ký handler thoát cho nhiều tình huống:
+    - Ctrl+C (SIGINT)
+    - SIGTERM
+    - Đóng cửa sổ console bằng nút X (Windows)
+    """
+    global _win_console_handler_ref
+
+    # Luôn chạy cleanup khi interpreter thoát bình thường
+    atexit.register(run_cleanup)
+
+    # Ctrl+C / SIGTERM
+    signal.signal(signal.SIGINT, _signal_handler)
+    if hasattr(signal, "SIGTERM"):
+        signal.signal(signal.SIGTERM, _signal_handler)
+
+    # Windows: bắt sự kiện đóng console bằng nút X
+    if sys.platform.startswith("win"):
+        HandlerRoutine = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+
+        def _win_console_handler(ctrl_type):
+            # 2=CTRL_CLOSE_EVENT, 5=LOGOFF, 6=SHUTDOWN
+            if ctrl_type in (0, 1, 2, 5, 6):
+                run_cleanup()
+            # False để Windows tiếp tục tiến trình đóng process
+            return False
+
+        _win_console_handler_ref = HandlerRoutine(_win_console_handler)
+        ctypes.windll.kernel32.SetConsoleCtrlHandler(_win_console_handler_ref, True)
 
 
 def load_config(config_path=CONFIG_FILE):
@@ -179,6 +255,9 @@ def run_auto_mode(device, session, com_config):
     if not com.connect():
         print("[AUTO] Không thể kết nối COM. Thoát chế độ auto.")
         return
+
+    # Đảm bảo đóng COM cả khi người dùng tắt app đột ngột
+    register_cleanup(com.disconnect)
     
     print("[AUTO] Chế độ AUTO đã sẵn sàng!")
     print("[AUTO] Đặt thùng lên băng chuyền để bắt đầu...\n")
@@ -213,6 +292,7 @@ def run_auto_mode(device, session, com_config):
                 continue
             
             print("[AUTO] ✓ Step 1 hoàn thành")
+            com.send_signal("1")
             back_home_from_industrial_1d_scan(device)
 
             
@@ -244,10 +324,12 @@ def run_auto_mode(device, session, com_config):
                 continue
             
             back_home_from_industrial_1d_scan(device)
+            com.send_signal("2")
             
             # Nếu đã xong (THÙNG TO) → gửi data
             if next_step == "DONE":
                 print("\n[AUTO] ✓ Phát hiện THÙNG TO - Hoàn thành!")
+                com.send_signal("3")
                 com.wait_for_off()
                 
                 # Gửi dữ liệu
@@ -293,6 +375,7 @@ def run_auto_mode(device, session, com_config):
                 continue
             
             print("\n[AUTO] ✓ THÙNG NHỎ hoàn thành!")
+            com.send_signal("3")
             back_home_from_industrial_1d_scan(device)
             com.wait_for_off()
             
@@ -311,7 +394,7 @@ def run_auto_mode(device, session, com_config):
     
     finally:
         com.disconnect()
-        back_home_from_industrial_1d_scan(device)
+        close_app(device)
 
 
 # ============================================================
@@ -324,6 +407,7 @@ def main():
     """
 
     print_header()
+    install_exit_handlers()
 
     # --------------------------------------------------
     # Bước 0: Kết nối điện thoại & khởi động app
@@ -340,6 +424,7 @@ def main():
 
     print("[INIT] Đang khởi động app Barkoder...")
     start_barkoder_app(device)
+    register_cleanup(lambda: close_app(device))
     print("[INIT] App sẵn sàng!\n")
 
     # Tạo session manager

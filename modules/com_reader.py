@@ -73,6 +73,30 @@ class COMReader:
         if self.serial and self.serial.is_open:
             self.serial.close()
             print("[COM] Đã ngắt kết nối")
+
+    def send_signal(self, value: str, with_newline: bool = True) -> bool:
+        """
+        Gửi tín hiệu ra cổng COM (ví dụ: "1", "2", "3").
+
+        Returns:
+            bool: True nếu gửi thành công, False nếu lỗi
+        """
+        if not self.serial or not self.serial.is_open:
+            print("[COM] Không thể gửi tín hiệu: COM chưa kết nối")
+            return False
+
+        try:
+            payload = value.strip()
+            if with_newline:
+                payload += "\n"
+
+            self.serial.write(payload.encode("utf-8"))
+            self.serial.flush()
+            print(f"[COM] → Đã gửi tín hiệu: {value}")
+            return True
+        except Exception as e:
+            print(f"[COM] Lỗi gửi tín hiệu '{value}': {e}")
+            return False
     
     def read_state(self):
         """
