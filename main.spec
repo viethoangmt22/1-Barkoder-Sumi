@@ -30,6 +30,16 @@ datas += [
     ("config.json", "."),
 ]
 
+# Thêm thư mục adb local để không phụ thuộc PATH hệ thống
+# Bao gồm tất cả file trong thư mục adb/ (adb.exe, dll, v.v.)
+import os
+if os.path.exists("adb"):
+    # Thêm toàn bộ thư mục adb vào build
+    from glob import glob
+    for item in glob("adb/*"):
+        if os.path.isfile(item):
+            datas += [(item, "adb")]
+
 
 a = Analysis(
     ["main.py"],

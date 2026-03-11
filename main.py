@@ -10,6 +10,7 @@ main.py
 """
 
 import sys
+import os
 import time
 import json
 import atexit
@@ -36,6 +37,46 @@ from modules.com_reader import COMReader, SwitchState
 # ============================================================
 
 CONFIG_FILE = "config.json"
+
+
+# ============================================================
+# ADB PATH SETUP
+# ============================================================
+
+def setup_local_adb():
+    """
+    Cấu hình để sử dụng ADB local trong thư mục adb/ của project.
+    
+    Thêm đường dẫn adb/ vào PATH environment để uiautomator2
+    có thể tìm thấy adb.exe mà không cần cài đặt ADB vào hệ thống.
+    
+    Hỗ trợ cả môi trường development và sau khi build bằng PyInstaller.
+    """
+    # Xác định thư mục gốc của chương trình
+    if getattr(sys, 'frozen', False):
+        # Chạy từ file .exe (PyInstaller)
+        base_dir = sys._MEIPASS
+    else:
+        # Chạy từ Python script
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Đường dẫn đến thư mục adb
+    adb_dir = os.path.join(base_dir, 'adb')
+    
+    # Kiểm tra xem adb.exe có tồn tại không
+    adb_exe = os.path.join(adb_dir, 'adb.exe')
+    
+    if os.path.exists(adb_exe):
+        # Thêm thư mục adb vào đầu PATH để ưu tiên dùng adb local
+        current_path = os.environ.get('PATH', '')
+        if adb_dir not in current_path:
+            os.environ['PATH'] = adb_dir + os.pathsep + current_path
+        print(f"[ADB] Sử dụng ADB local: {adb_exe}")
+        return True
+    else:
+        print(f"[ADB] Không tìm thấy adb.exe trong {adb_dir}")
+        print(f"[ADB] Vui lòng đọc file adb/README.txt để biết cách cài đặt")
+        return False
 
 # ============================================================
 # CLEANUP/EXIT HANDLER
@@ -410,7 +451,15 @@ def main():
     install_exit_handlers()
 
     # --------------------------------------------------
-    # Bước 0: Kết nối điện thoại & khởi động app
+    # Bước 0: Cấu hình ADB local
+    # --------------------------------------------------
+    print("\n[INIT] Đang kiểm tra ADB...")
+    if not setup_local_adb():
+        print("[WARNING] ADB local không khả dụng")
+        print("[WARNING] Hệ thống sẽ thử sử dụng ADB từ PATH (nếu có)")
+    
+    # --------------------------------------------------
+    # Bước 1: Kết nối điện thoại & khởi động app
     # --------------------------------------------------
     print("\n[INIT] Đang kết nối thiết bị Android...")
 
