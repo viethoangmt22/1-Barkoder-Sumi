@@ -1,5 +1,5 @@
 {
-  "com_port": "COM9",
+  "com_port": "COM1",
   "baudrate": 9600,
   "timeout": 1
 }

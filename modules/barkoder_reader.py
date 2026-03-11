@@ -8,45 +8,32 @@ DEFAULT_BARCODE_XPATH = '//*[@resource-id="com.barkoder.demoscanner:id/txtBarcod
 
 def collect_barcodes(
     device=None,
-    xpath=DEFAULT_BARCODE_XPATH,
-    scroll_delay=0.1,
-    max_idle_rounds=1
+    barcode_xpath=DEFAULT_BARCODE_XPATH,
+    expand_res_id="com.barkoder.demoscanner:id/layoutExpandBtn",
+    click_expand=False,
+    expand_delay=0.2,
 ):
     """
-    Thu thập toàn bộ barcode đang hiển thị trong Barkoder app.
-
-    Returns:
-        set[str]: tập barcode không trùng
+    Lấy barcode đang hiển thị.
+    Tuỳ chọn click các nút expand hiện có trên màn hình.
     """
     d = device or u2.connect()
+    barcodes = set()
 
-    all_barcodes = set()
-    last_count = -1
-    idle_rounds = 0
+    # 1) Thu barcode đang hiển thị
+    for el in d.xpath(barcode_xpath).all():
+        text = (el.text or "").strip()
+        if text:
+            barcodes.add(text)
 
-    while True:
-        last_count = len(all_barcodes)
+    # 2) Nếu cần thì click expand (không phụ thuộc vào el.elem.xpath)
+    if click_expand:
+        btn_xpath = f'//*[@resource-id="{expand_res_id}"]'
+        for btn in d.xpath(btn_xpath).all():
+            btn.click()
+            time.sleep(expand_delay)
 
-        elements = d.xpath(xpath).all()
-        for el in elements:
-            if el.text:
-                all_barcodes.add(el.text.strip())
-
-        if not d(scrollable=True).exists:
-            break
-
-        d(scrollable=True).scroll.forward()
-        time.sleep(scroll_delay)
-
-        if len(all_barcodes) == last_count:
-            idle_rounds += 1
-            if idle_rounds >= max_idle_rounds:
-                break
-        else:
-            idle_rounds = 0
-
-    return all_barcodes
-
+    return barcodes
 
 def back_home_from_industrial_1d_scan(device=None):
     """
